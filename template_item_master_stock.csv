@@ -1,0 +1,9 @@
+Item_Code,Description,Category,Stores_Physical_Stock,Unit_Cost,Supplier_MOQ,Pack_Size,Default_Lead_Days
+SMC-001,Critical Stockout Item,Raw Material,5,1200.50,5,1,21
+SMC-002,PO Release Needed Item,Raw Material,20,950.00,50,5,14
+FST-101,Expedite In-Transit Item,Fasteners,50,0.15,1000,1000,7
+FST-102,Healthy Stock Item,Fasteners,15000,0.25,1000,1000,7
+BRG-201,Ball Bearing - 6204-2RS,Bearings,200,45.00,20,10,30
+BRG-202,Roller Bearing - NU205,Bearings,150,65.00,10,5,35
+PKG-301,Corrugated Box - 40x40x40cm,Packaging,2500,1.20,500,100,10
+
