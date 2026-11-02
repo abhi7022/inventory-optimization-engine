@@ -31,6 +31,16 @@ def get_user_column_mapping(df, expected_cols, file_name):
         mapping[expected] = selection
     return df.rename(columns={v: k for k, v in mapping.items()})
 
+# --- CONFIGURATION & UI ---
+st.set_page_config(page_title="RM Inventory Optimization Engine", layout="wide")
+
+# Modern UI styling
+st.markdown("""
+<style>
+    .stApp { background-color: #f8f9fa; }
+    .stMetric { background-color: #ffffff; padding: 20px; border-radius: 10px; border: 1px solid #e1e4e8; box-shadow: 2px 2px 5px #eeeeee; }
+    h1, h2 { color: #2E86C1; }
+</style>
 """, unsafe_allow_html=True)
 
 st.title("🏭 Plant Raw Material (RM) Inventory Optimization Engine")
