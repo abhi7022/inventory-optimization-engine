@@ -17,6 +17,20 @@ st.markdown("""
     .stMetric { background-color: #ffffff; padding: 20px; border-radius: 10px; border: 1px solid #e1e4e8; box-shadow: 2px 2px 5px #eeeeee; }
     h1, h2 { color: #2E86C1; }
 </style>
+def get_user_column_mapping(df, expected_cols, file_name):
+    st.write(f"### Map your columns for {file_name}")
+    mapping = {}
+    cols = list(df.columns)
+    for expected in expected_cols:
+        default_idx = 0
+        for i, col in enumerate(cols):
+            if any(synonym in col.lower() for synonym in expected.lower().split('_')):
+                default_idx = i
+                break
+        selection = st.selectbox(f"Select column for: **{expected}**", cols, index=default_idx, key=f"{file_name}_{expected}")
+        mapping[expected] = selection
+    return df.rename(columns={v: k for k, v in mapping.items()})
+
 """, unsafe_allow_html=True)
 
 st.title("🏭 Plant Raw Material (RM) Inventory Optimization Engine")
@@ -131,7 +145,20 @@ with tab2:
         df_master, df_issues, df_po = [pd.read_excel(xls, sheet_name=s[i]) for i in range(3)]
 
 if df_master is not None and df_issues is not None and df_po is not None:
+    st.subheader("🛠️ Column Mapping Assistant")
+    st.info("Map your custom file headers to the fields required by the engine.")
+    
+    with st.expander("Configure Column Mappings", expanded=True):
+        m1, m2, m3 = st.columns(3)
+        with m1:
+            df_master = get_user_column_mapping(df_master, ['Item_Code', 'Description', 'Category', 'Stores_Physical_Stock', 'Unit_Cost', 'Supplier_MOQ', 'Pack_Size', 'Default_Lead_Days'], "Item Master")
+        with m2:
+            df_issues = get_user_column_mapping(df_issues, ['Item_Code', 'Date', 'Qty_Issued'], "MTN Issues")
+        with m3:
+            df_po = get_user_column_mapping(df_po, ['Item_Code', 'PO_Date', 'GRN_Date', 'Open_Pending_Qty'], "PO/GRN Register")
+
     if st.button("🚀 Run Optimization Engine"):
+
         results = calculate_inventory_metrics(df_master, df_issues, df_po, csl, holding_cost_pct, po_admin_cost)
         
         st.subheader("📊 Inventory vs. Safety Stock Analysis")
