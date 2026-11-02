@@ -7,7 +7,7 @@ import math
 from datetime import datetime
 import plotly.express as px
 
-# --- CONFIGURATION & UI ---
+# --- PAGE CONFIG ---
 st.set_page_config(page_title="RM Inventory Optimization Engine", layout="wide")
 
 # Modern UI styling
@@ -17,6 +17,9 @@ st.markdown("""
     .stMetric { background-color: #ffffff; padding: 20px; border-radius: 10px; border: 1px solid #e1e4e8; box-shadow: 2px 2px 5px #eeeeee; }
     h1, h2 { color: #2E86C1; }
 </style>
+""", unsafe_allow_html=True)
+
+# --- HELPER FUNCTIONS ---
 def get_user_column_mapping(df, expected_cols, file_name):
     st.write(f"### Map your columns for {file_name}")
     mapping = {}
@@ -30,50 +33,6 @@ def get_user_column_mapping(df, expected_cols, file_name):
         selection = st.selectbox(f"Select column for: **{expected}**", cols, index=default_idx, key=f"{file_name}_{expected}")
         mapping[expected] = selection
     return df.rename(columns={v: k for k, v in mapping.items()})
-
-# --- CONFIGURATION & UI ---
-st.set_page_config(page_title="RM Inventory Optimization Engine", layout="wide")
-
-# Modern UI styling
-st.markdown("""
-<style>
-    .stApp { background-color: #f8f9fa; }
-    .stMetric { background-color: #ffffff; padding: 20px; border-radius: 10px; border: 1px solid #e1e4e8; box-shadow: 2px 2px 5px #eeeeee; }
-    h1, h2 { color: #2E86C1; }
-</style>
-""", unsafe_allow_html=True)
-
-st.title("🏭 Plant Raw Material (RM) Inventory Optimization Engine")
-
-
-
-# --- SIDEBAR CONTROLS ---
-st.sidebar.header("Optimization Parameters")
-csl = st.sidebar.slider("Cycle Service Level (CSL)", 85.0, 99.9, 95.0, 0.1) / 100.0
-holding_cost_pct = st.sidebar.number_input("Holding Cost % (Annual)", 5.0, 50.0, 20.0) / 100.0
-po_admin_cost = st.sidebar.number_input("Fixed PO Admin Cost ($)", 1.0, 1000.0, 50.0)
-
-with st.sidebar.expander("💡 Cost Parameter Guide"):
-    st.markdown("""
-    **Understanding the Engine Metrics:**
-    *   **Avg Daily Demand (mu_D)**: The average quantity consumed each day.
-    *   **Demand Volatility (sigma_D)**: The standard deviation in daily usage (higher means less predictable).
-    *   **Avg Lead Time (mu_L)**: Average days taken from PO issuance to material arrival.
-    *   **Lead Time Volatility (sigma_L)**: The consistency of your suppliers.
-    *   **Recommended Safety Stock**: Extra buffer stock kept to mitigate demand/lead time spikes.
-    *   **Reorder Point (ROP)**: When stock hits this level, it's time to place a new PO.
-
-    ---
-
-    **Holding Cost % Calculation:**
-    Holding Cost % = Capital Rate + Storage Costs + Insurance & Waste
-    *   **Rule of Thumb for small factories**: **18% to 25%** per year (Default: **20%**).
-
-    **Fixed PO Admin Cost ($) Calculation:**
-    PO Cost = (Purchasing Dept Salaries + Software Costs) / Total POs per Year
-    *   *Typical Range*: **$30 to $100 per PO** (Default: **$50**).
-
-    """)
 
 def calculate_inventory_metrics(df_master, df_issues, df_po, csl, h_cost_pct, po_cost):
     df_issues['Date'] = pd.to_datetime(df_issues['Date'])
@@ -133,55 +92,52 @@ def calculate_inventory_metrics(df_master, df_issues, df_po, csl, h_cost_pct, po
     final_df['Action_Status'] = final_df.apply(get_status, axis=1)
     return final_df
 
+st.title("🏭 Plant Raw Material (RM) Inventory Optimization Engine")
 
-# --- ONBOARDING & DATA GUIDE STEP ---
-with st.expander("📖 Step-by-Step Data Onboarding Guide (Click to expand)", expanded=False):
+# --- SIDEBAR CONTROLS ---
+st.sidebar.header("Optimization Parameters")
+csl = st.sidebar.slider("Cycle Service Level (CSL)", 85.0, 99.9, 95.0, 0.1) / 100.0
+holding_cost_pct = st.sidebar.number_input("Holding Cost % (Annual)", 5.0, 50.0, 20.0) / 100.0
+po_admin_cost = st.sidebar.number_input("Fixed PO Admin Cost ($)", 1.0, 1000.0, 50.0)
+
+with st.sidebar.expander("💡 Cost Parameter Guide"):
     st.markdown("""
-    ### How to Prepare and Upload Your Data
-    This engine requires three datasets. You can upload them as 3 separate CSV/Excel files or a single 3-sheet Excel workbook.
+    **Understanding the Engine Metrics:**
+    *   **Avg Daily Demand (mu_D)**: The average quantity consumed each day.
+    *   **Demand Volatility (sigma_D)**: The standard deviation in daily usage.
+    *   **Avg Lead Time (mu_L)**: Average days taken from PO issuance to material arrival.
+    *   **Lead Time Volatility (sigma_L)**: The consistency of your suppliers.
+    *   **Recommended Safety Stock**: Buffer stock kept to mitigate demand/lead time spikes.
+    *   **Reorder Point (ROP)**: When stock hits this level, place a new PO.
+
+    ---
+
+    **Holding Cost % Calculation:**
+    Holding Cost % = Capital Rate + Storage Costs + Insurance & Waste
+    *   *Rule of Thumb for small factories*: **18% to 25%** per year (Default: **20%**).
+
+    **Fixed PO Admin Cost ($) Calculation:**
+    PO Cost = (Purchasing Dept Salaries + Software Costs) / Total POs per Year
+    *   *Typical Range*: **$30 to $100 per PO** (Default: **$50**).
     """)
-    
+
+# --- ONBOARDING & DATA GUIDE ---
+with st.expander("📖 Step-by-Step Data Onboarding Guide", expanded=False):
+    st.markdown("### How to Prepare and Upload Your Data")
     g1, g2, g3 = st.columns(3)
-    
     with g1:
-        st.markdown("#### 1. Item Master File")
-        st.markdown("Contains master details and current physical inventory levels.")
-        st.markdown("""
-        * **Item_Code**: SKU/Material Part Number (e.g., `SMC-001`, `FST-101`)
-        * **Description**: Item description or material name
-        * **Category**: Raw Material, Fasteners, Packaging, Bearings, etc.
-        * **Stores_Physical_Stock**: Current physical count in store/warehouse
-        * **Unit_Cost**: Cost per unit ($)
-        * **Supplier_MOQ**: Minimum Order Quantity required by supplier
-        * **Pack_Size**: Ordering multiple/increment size
-        * **Default_Lead_Days**: Contractual or estimated supplier lead time in days
-        """)
-        
+        st.markdown("#### 1. Item Master")
+        st.write("* SKU/Part#, Description, Current Stock, Unit Cost, MOQ, Pack Size, Lead Time.")
     with g2:
-        st.markdown("#### 2. MTN Issues File")
-        st.markdown("Historical store issue notes showing daily or weekly raw material consumption.")
-        st.markdown("""
-        * **Item_Code**: Must match the Item_Code in the Item Master
-        * **Date**: Date material was issued/consumed (`YYYY-MM-DD`)
-        * **Qty_Issued**: Quantity issued on that specific date
-        """)
-        
+        st.markdown("#### 2. MTN Issues")
+        st.write("* Item Code, Date, Qty Issued.")
     with g3:
-        st.markdown("#### 3. PO/GRN Register File")
-        st.markdown("Historical purchase order and goods receipt register to measure supplier lead time variability.")
-        st.markdown("""
-        * **Item_Code**: SKU/Material Part Number
-        * **PO_Date**: Date Purchase Order was placed (`YYYY-MM-DD`)
-        * **GRN_Date**: Date Goods Received Note was recorded (leave blank for pending orders)
-        * **Open_Pending_Qty**: Currently open or in-transit order quantity
-        """)
-        
-    st.info("💡 **Don't worry about exact column names!** Our automatic Column Mapping Assistant below will let you map your file's headers directly to the required fields.")
+        st.markdown("#### 3. PO/GRN Register")
+        st.write("* Item Code, PO Date, GRN Date, Pending Qty.")
+    st.info("💡 Map your column headers using the assistant below after uploading.")
 
 # --- UI INPUT TABS ---
 tab1, tab2 = st.tabs(["📂 Multi-File Upload", "📘 Single Workbook Upload"])
-
-
 df_master, df_issues, df_po = None, None, None
 
 with tab1:
@@ -194,94 +150,43 @@ with tab1:
         df_issues = pd.read_csv(f_i) if f_i.name.endswith('.csv') else pd.read_excel(f_i)
         df_po = pd.read_csv(f_p) if f_p.name.endswith('.csv') else pd.read_excel(f_p)
 
+if df_master is not None and df_issues is not None and df_po is not None:
+    st.subheader("🛠️ Column Mapping Assistant")
+    with st.expander("Configure Column Mappings", expanded=True):
+        m1, m2, m3 = st.columns(3)
+        with m1: df_master = get_user_column_mapping(df_master, ['Item_Code', 'Description', 'Category', 'Stores_Physical_Stock', 'Unit_Cost', 'Supplier_MOQ', 'Pack_Size', 'Default_Lead_Days'], "Item Master")
+        with m2: df_issues = get_user_column_mapping(df_issues, ['Item_Code', 'Date', 'Qty_Issued'], "MTN Issues")
+        with m3: df_po = get_user_column_mapping(df_po, ['Item_Code', 'PO_Date', 'GRN_Date', 'Open_Pending_Qty'], "PO/GRN Register")
+
+    if st.button("🚀 Run Optimization Engine"):
+        results = calculate_inventory_metrics(df_master, df_issues, df_po, csl, holding_cost_pct, po_admin_cost)
+        st.subheader("📊 Inventory vs. Safety Stock Analysis")
+        fig = px.bar(results, x='Item_Code', y=['Stores_Physical_Stock', 'Safety_Stock'], barmode='group')
+        st.plotly_chart(fig, use_container_width=True)
+        st.subheader("Inventory Action Triage")
+        def color_status(val):
+            colors = {'CRITICAL STOCKOUT THREAT': '#FF4B4B', 'RELEASE PURCHASE ORDER': '#FFA500', 'EXPEDITE IN-TRANSIT GRN': '#2E86C1', 'HEALTHY INVENTORY': '#28A745'}
+            return f'background-color: {colors.get(val, "#FFFFFF")}; color: #FFFFFF; font-weight: bold; border-radius: 4px;'
+        results_display = results.rename(columns={'mu_D': 'Avg Daily Demand', 'sigma_D': 'Demand Volatility', 'mu_L': 'Avg Lead Time (Days)', 'sigma_L': 'Lead Time Volatility', 'Safety_Stock': 'Recommended Safety Stock', 'ROP': 'Reorder Point', 'Optimal_Order_Qty': 'Optimal Order Qty'})
+        cols = ['Item_Code', 'Description', 'ABC_Class', 'Stores_Physical_Stock', 'Recommended Safety Stock', 'Reorder Point', 'Optimal Order Qty', 'Action_Status']
+        st.dataframe(results_display[cols].style.map(color_status, subset=['Action_Status']), width=1500)
+        buf = io.BytesIO()
+        with pd.ExcelWriter(buf, engine='xlsxwriter') as writer:
+            results_display.to_excel(writer, sheet_name='Inventory_Optimization', index=False)
+            workbook, worksheet = writer.book, writer.sheets['Inventory_Optimization']
+            header_format = workbook.add_format({'bold': True, 'bg_color': '#2E86C1', 'font_color': 'white', 'border': 1})
+            status_formats = {s: workbook.add_format({'bg_color': c, 'font_color': 'white'}) for s, c in {'CRITICAL STOCKOUT THREAT': '#FF4B4B', 'RELEASE PURCHASE ORDER': '#FFA500', 'EXPEDITE IN-TRANSIT GRN': '#2E86C1', 'HEALTHY INVENTORY': '#28A745'}.items()}
+            for col_num, value in enumerate(results_display.columns.values): worksheet.write(0, col_num, value, header_format); worksheet.set_column(col_num, col_num, 15)
+            for row_num, status in enumerate(results_display['Action_Status']): 
+                if status in status_formats: worksheet.write(row_num + 1, len(results_display.columns) - 1, status, status_formats[status])
+        st.divider()
+        st.subheader("📝 We Value Your Feedback")
+        st.link_button("Share Your Honest Review", "https://docs.google.com/forms/d/e/1FAIpQLSee7lV13AZ4594w2ZmzvB4mfUOMCOLPBbhQss-I37ng_gkksA/viewform?usp=sf_link")
+        st.download_button("📥 Download Beautiful Report", buf.getvalue(), "Inventory_Optimization_Report.xlsx")
+
 with tab2:
     f_all = st.file_uploader("3-sheet Workbook", type=['xlsx'])
     if f_all:
         xls = pd.ExcelFile(f_all)
         s = xls.sheet_names
         df_master, df_issues, df_po = [pd.read_excel(xls, sheet_name=s[i]) for i in range(3)]
-
-if df_master is not None and df_issues is not None and df_po is not None:
-    st.subheader("🛠️ Column Mapping Assistant")
-    st.info("Map your custom file headers to the fields required by the engine.")
-    
-    with st.expander("Configure Column Mappings", expanded=True):
-        m1, m2, m3 = st.columns(3)
-        with m1:
-            df_master = get_user_column_mapping(df_master, ['Item_Code', 'Description', 'Category', 'Stores_Physical_Stock', 'Unit_Cost', 'Supplier_MOQ', 'Pack_Size', 'Default_Lead_Days'], "Item Master")
-        with m2:
-            df_issues = get_user_column_mapping(df_issues, ['Item_Code', 'Date', 'Qty_Issued'], "MTN Issues")
-        with m3:
-            df_po = get_user_column_mapping(df_po, ['Item_Code', 'PO_Date', 'GRN_Date', 'Open_Pending_Qty'], "PO/GRN Register")
-
-    if st.button("🚀 Run Optimization Engine"):
-
-        results = calculate_inventory_metrics(df_master, df_issues, df_po, csl, holding_cost_pct, po_admin_cost)
-        
-        st.subheader("📊 Inventory vs. Safety Stock Analysis")
-        fig = px.bar(results, x='Item_Code', y=['Stores_Physical_Stock', 'Safety_Stock'], barmode='group')
-        st.plotly_chart(fig, use_container_width=True)
-        
-        st.subheader("Inventory Action Triage")
-        def color_status(val):
-            # Professional Color Palette
-            colors = {
-                'CRITICAL STOCKOUT THREAT': '#FF4B4B', # Alert Red
-                'RELEASE PURCHASE ORDER': '#FFA500',   # Warning Orange
-                'EXPEDITE IN-TRANSIT GRN': '#2E86C1',  # Action Blue
-                'HEALTHY INVENTORY': '#28A745'         # Success Green
-            }
-            return f'background-color: {colors.get(val, "#FFFFFF")}; color: #FFFFFF; font-weight: bold; border-radius: 4px;'
-        
-        # Friendly Column Names
-        results_display = results.rename(columns={
-            'mu_D': 'Avg Daily Demand',
-            'sigma_D': 'Demand Volatility',
-            'mu_L': 'Avg Lead Time (Days)',
-            'sigma_L': 'Lead Time Volatility',
-            'Safety_Stock': 'Recommended Safety Stock',
-            'ROP': 'Reorder Point',
-            'Optimal_Order_Qty': 'Optimal Order Qty'
-        })
-        
-        cols = ['Item_Code', 'Description', 'ABC_Class', 'Stores_Physical_Stock', 'Recommended Safety Stock', 'Reorder Point', 'Optimal Order Qty', 'Action_Status']
-        st.dataframe(results_display[cols].style.map(color_status, subset=['Action_Status']), width=1500)
-
-        
-        # --- BEAUTIFY EXCEL EXPORT ---
-        buf = io.BytesIO()
-        with pd.ExcelWriter(buf, engine='xlsxwriter') as writer:
-            results_display.to_excel(writer, sheet_name='Inventory_Optimization', index=False)
-            
-            # Access workbook and worksheet
-            workbook = writer.book
-            worksheet = writer.sheets['Inventory_Optimization']
-            
-            # Define Formats
-            header_format = workbook.add_format({'bold': True, 'bg_color': '#2E86C1', 'font_color': 'white', 'border': 1})
-            money_format = workbook.add_format({'num_format': '$#,##0.00'})
-            status_formats = {
-                'CRITICAL STOCKOUT THREAT': workbook.add_format({'bg_color': '#FF4B4B', 'font_color': 'white'}),
-                'RELEASE PURCHASE ORDER': workbook.add_format({'bg_color': '#FFA500', 'font_color': 'white'}),
-                'EXPEDITE IN-TRANSIT GRN': workbook.add_format({'bg_color': '#2E86C1', 'font_color': 'white'}),
-                'HEALTHY INVENTORY': workbook.add_format({'bg_color': '#28A745', 'font_color': 'white'})
-            }
-            
-            # Apply Header Formatting
-            for col_num, value in enumerate(results_display.columns.values):
-                worksheet.write(0, col_num, value, header_format)
-                worksheet.set_column(col_num, col_num, 15)
-            
-            # Apply Status Formatting
-            for row_num, status in enumerate(results_display['Action_Status']):
-                if status in status_formats:
-                    worksheet.write(row_num + 1, len(results_display.columns) - 1, status, status_formats[status])
-
-        # --- Feedback Section ---
-        st.divider()
-        st.subheader("📝 We Value Your Feedback")
-        st.write("Help us make this tool better for your plant operations!")
-        st.link_button("Share Your Honest Review", "https://docs.google.com/forms/d/e/1FAIpQLSee7lV13AZ4594w2ZmzvB4mfUOMCOLPBbhQss-I37ng_gkksA/viewform?usp=sf_link")
-        
-        st.download_button("📥 Download Beautiful Report", buf.getvalue(), "Inventory_Optimization_Report.xlsx")
-
