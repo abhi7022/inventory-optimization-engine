@@ -124,7 +124,54 @@ def calculate_inventory_metrics(df_master, df_issues, df_po, csl, h_cost_pct, po
     return final_df
 
 
+# --- ONBOARDING & DATA GUIDE STEP ---
+with st.expander("📖 Step-by-Step Data Onboarding Guide (Click to expand)", expanded=False):
+    st.markdown("""
+    ### How to Prepare and Upload Your Data
+    This engine requires three datasets. You can upload them as 3 separate CSV/Excel files or a single 3-sheet Excel workbook.
+    """)
+    
+    g1, g2, g3 = st.columns(3)
+    
+    with g1:
+        st.markdown("#### 1. Item Master File")
+        st.markdown("Contains master details and current physical inventory levels.")
+        st.markdown("""
+        * **Item_Code**: SKU/Material Part Number (e.g., `SMC-001`, `FST-101`)
+        * **Description**: Item description or material name
+        * **Category**: Raw Material, Fasteners, Packaging, Bearings, etc.
+        * **Stores_Physical_Stock**: Current physical count in store/warehouse
+        * **Unit_Cost**: Cost per unit ($)
+        * **Supplier_MOQ**: Minimum Order Quantity required by supplier
+        * **Pack_Size**: Ordering multiple/increment size
+        * **Default_Lead_Days**: Contractual or estimated supplier lead time in days
+        """)
+        
+    with g2:
+        st.markdown("#### 2. MTN Issues File")
+        st.markdown("Historical store issue notes showing daily or weekly raw material consumption.")
+        st.markdown("""
+        * **Item_Code**: Must match the Item_Code in the Item Master
+        * **Date**: Date material was issued/consumed (`YYYY-MM-DD`)
+        * **Qty_Issued**: Quantity issued on that specific date
+        """)
+        
+    with g3:
+        st.markdown("#### 3. PO/GRN Register File")
+        st.markdown("Historical purchase order and goods receipt register to measure supplier lead time variability.")
+        st.markdown("""
+        * **Item_Code**: SKU/Material Part Number
+        * **PO_Date**: Date Purchase Order was placed (`YYYY-MM-DD`)
+        * **GRN_Date**: Date Goods Received Note was recorded (leave blank for pending orders)
+        * **Open_Pending_Qty**: Currently open or in-transit order quantity
+        """)
+        
+    st.info("💡 **Don't worry about exact column names!** Our automatic Column Mapping Assistant below will let you map your file's headers directly to the required fields.")
+
+# --- UI INPUT TABS ---
 tab1, tab2 = st.tabs(["📂 Multi-File Upload", "📘 Single Workbook Upload"])
+
+
 df_master, df_issues, df_po = None, None, None
 
 with tab1:
