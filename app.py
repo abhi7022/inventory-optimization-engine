@@ -197,7 +197,7 @@ if df_master is not None and df_issues is not None and df_po is not None:
         st.divider()
         st.subheader("📝 We Value Your Feedback")
         st.write("Help us make this tool better for your plant operations!")
-        st.link_button("Share Your Honest Review", "https://docs.google.com/forms/d/e/1FAIpQLSc_Yy88cO08T7r8t-a8S2Qh5aUuR7Y9W-2Y5Q-A5N2yR3c8bQ/viewform?usp=sf_link")
+        st.link_button("Share Your Honest Review", "https://docs.google.com/forms/d/e/1FAIpQLSee7lV13AZ4594w2ZmzvB4mfUOMCOLPBbhQss-I37ng_gkksA/viewform?usp=sf_link")
         
         st.download_button("📥 Download Beautiful Report", buf.getvalue(), "Inventory_Optimization_Report.xlsx")
 
