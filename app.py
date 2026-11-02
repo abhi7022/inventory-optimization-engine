@@ -20,19 +20,58 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- HELPER FUNCTIONS ---
+SYNONYMS = {
+    'Item_Code': ['item_code', 'item', 'item_no', 'item_number', 'sku', 'part_no', 'part_number', 'material', 'material_no', 'material_code'],
+    'Description': ['description', 'desc', 'item_description', 'material_description', 'name', 'item_name'],
+    'Category': ['category', 'cat', 'item_category', 'type', 'group', 'material_group'],
+    'Stores_Physical_Stock': ['stores_physical_stock', 'physical_stock', 'stock', 'current_stock', 'qty_on_hand', 'on_hand', 'inventory'],
+    'Unit_Cost': ['unit_cost', 'cost', 'unit_price', 'price', 'rate', 'cost_per_unit'],
+    'Supplier_MOQ': ['supplier_moq', 'moq', 'min_order_qty', 'minimum_order_qty'],
+    'Pack_Size': ['pack_size', 'pack', 'lot_size', 'order_multiple', 'batch_size'],
+    'Default_Lead_Days': ['default_lead_days', 'lead_days', 'lead_time', 'default_lead_time', 'lt_days'],
+    'Date': ['date', 'issue_date', 'transaction_date', 'txn_date', 'posted_date'],
+    'Qty_Issued': ['qty_issued', 'issued_qty', 'quantity', 'qty', 'consumption', 'usage'],
+    'PO_Date': ['po_date', 'order_date', 'purchasing_date', 'creation_date'],
+    'GRN_Date': ['grn_date', 'receipt_date', 'received_date', 'delivery_date', 'gr_date'],
+    'Open_Pending_Qty': ['open_pending_qty', 'pending_qty', 'open_qty', 'qty_on_order', 'in_transit_qty', 'open_po_qty']
+}
+
 def get_user_column_mapping(df, expected_cols, file_name):
     st.write(f"### Map your columns for {file_name}")
     mapping = {}
     cols = list(df.columns)
+    
     for expected in expected_cols:
+        syns = SYNONYMS.get(expected, [expected.lower()])
         default_idx = 0
+        
+        # 1. Exact match (case insensitive, ignoring spaces/underscores)
+        found = False
         for i, col in enumerate(cols):
-            if any(synonym in col.lower() for synonym in expected.lower().split('_')):
+            clean_col = col.strip().lower().replace(" ", "_")
+            if clean_col in syns:
                 default_idx = i
+                found = True
                 break
+        
+        # 2. Substring match if exact match failed
+        if not found:
+            for i, col in enumerate(cols):
+                clean_col = col.strip().lower().replace(" ", "_")
+                if any(syn in clean_col for syn in syns):
+                    default_idx = i
+                    break
+
         selection = st.selectbox(f"Select column for: **{expected}**", cols, index=default_idx, key=f"{file_name}_{expected}")
         mapping[expected] = selection
+    
+    # Check duplicate mapped columns
+    mapped_selected = list(mapping.values())
+    if len(mapped_selected) != len(set(mapped_selected)):
+        st.warning(f"⚠️ Warning in {file_name}: Some fields are mapped to the same uploaded column. Please verify dropdown selections.")
+        
     return df.rename(columns={v: k for k, v in mapping.items()})
+
 
 def calculate_inventory_metrics(df_master, df_issues, df_po, csl, h_cost_pct, po_cost):
     df_issues['Date'] = pd.to_datetime(df_issues['Date'])
