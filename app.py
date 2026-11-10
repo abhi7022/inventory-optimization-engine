@@ -6,41 +6,110 @@ import io
 import math
 from datetime import datetime
 import plotly.express as px
+import plotly.graph_objects as go
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="RM Inventory Optimization Engine", layout="wide", page_icon="🏭")
 
-# Modern UI styling
+# High-polish modern SaaS styling
 st.markdown("""
 <style>
-    .stApp { background-color: #1A5F7A; color: #F1F5F9; }
-    .stMetric { background-color: #2C7891; padding: 20px; border-radius: 10px; border: 1px solid #4893A9; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); margin: 10px 0; }
-    .stMetric > label { color: #E0E7FF; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
-    .stMetric > div { color: #FFFFFF; }
-    h1, h2, h3 { color: #FFFFFF; }
-    .stDataFrame, .stTable { background-color: #2C7891; }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     
-    /* Clean button and download button styling */
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
+    }
+    
+    .stApp { 
+        background-color: #0F172A; 
+        color: #F8FAFC; 
+    }
+    
+    /* Clean Top KPI Cards */
+    .kpi-container {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+    .kpi-card {
+        flex: 1;
+        background: #1E293B;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        padding: 20px 24px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+        transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+    .kpi-card:hover {
+        border-color: #0284C7;
+        transform: translateY(-2px);
+    }
+    .kpi-title {
+        color: #94A3B8;
+        font-size: 13px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 8px;
+    }
+    .kpi-value {
+        color: #FFFFFF;
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1.2;
+    }
+    .kpi-badge {
+        display: inline-block;
+        margin-top: 10px;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 3px 10px;
+        border-radius: 20px;
+    }
+    .badge-red { background: rgba(239, 68, 68, 0.2); color: #F87171; border: 1px solid rgba(239, 68, 68, 0.4); }
+    .badge-amber { background: rgba(245, 158, 11, 0.2); color: #FBBF24; border: 1px solid rgba(245, 158, 11, 0.4); }
+    .badge-green { background: rgba(16, 185, 129, 0.2); color: #34D399; border: 1px solid rgba(16, 185, 129, 0.4); }
+
+    /* Modern Table Wrapper */
+    .stDataFrame {
+        border: 1px solid #334155;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    
+    /* Buttons */
     div.stButton > button, div.stDownloadButton > button, a.stLinkButton {
-        background-color: #FFFFFF !important;
-        color: #0F172A !important;
-        border: 1px solid #CBD5E1 !important;
+        background-color: #0284C7 !important;
+        color: #FFFFFF !important;
+        border: none !important;
         font-weight: 600 !important;
-        padding: 10px 20px !important;
+        padding: 10px 24px !important;
         border-radius: 8px !important;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        box-shadow: 0 4px 6px -1px rgba(2, 132, 199, 0.3) !important;
     }
     div.stButton > button:hover, div.stDownloadButton > button:hover, a.stLinkButton:hover {
-        background-color: #F8FAFC !important;
-        border-color: #94A3B8 !important;
-        color: #0F172A !important;
+        background-color: #0369A1 !important;
     }
-    .consult-banner {
-        background: linear-gradient(135deg, #0F766E 0%, #115E59 100%);
-        border: 1px solid #2DD4BF;
+    
+    /* Upload Boxes */
+    [data-testid="stFileUploader"] {
+        background-color: #1E293B !important;
+        border: 1px dashed #475569 !important;
         border-radius: 10px;
-        padding: 18px 24px;
-        margin-top: 25px;
+        padding: 10px;
+    }
+    [data-testid="stFileUploader"] label {
+        color: #F8FAFC !important;
+        font-weight: 600;
+    }
+
+    /* Advisory Box */
+    .consult-banner {
+        background: linear-gradient(135deg, #0F766E 0%, #134E4A 100%);
+        border: 1px solid #2DD4BF;
+        border-radius: 12px;
+        padding: 22px 28px;
+        margin-top: 32px;
         color: #FFFFFF;
     }
 </style>
@@ -64,15 +133,13 @@ SYNONYMS = {
 }
 
 def get_user_column_mapping(df, expected_cols, file_name):
-    st.write(f"### Map your columns for {file_name}")
+    st.write(f"#### {file_name}")
     mapping = {}
     cols = list(df.columns)
     
     for expected in expected_cols:
         syns = SYNONYMS.get(expected, [expected.lower()])
         default_idx = 0
-        
-        # 1. Exact match
         found = False
         for i, col in enumerate(cols):
             clean_col = col.strip().lower().replace(" ", "_")
@@ -80,8 +147,6 @@ def get_user_column_mapping(df, expected_cols, file_name):
                 default_idx = i
                 found = True
                 break
-        
-        # 2. Substring match
         if not found:
             for i, col in enumerate(cols):
                 clean_col = col.strip().lower().replace(" ", "_")
@@ -89,16 +154,10 @@ def get_user_column_mapping(df, expected_cols, file_name):
                     default_idx = i
                     break
 
-        selection = st.selectbox(f"Select column for: **{expected}**", cols, index=default_idx, key=f"{file_name}_{expected}")
+        selection = st.selectbox(f"**{expected}**", cols, index=default_idx, key=f"{file_name}_{expected}")
         mapping[expected] = selection
-    
-    # Check duplicate mapped columns
-    mapped_selected = list(mapping.values())
-    if len(mapped_selected) != len(set(mapped_selected)):
-        st.warning(f"⚠️ Warning in {file_name}: Some fields are mapped to the same uploaded column. Please verify dropdown selections.")
         
     return df.rename(columns={v: k for k, v in mapping.items()})
-
 
 def calculate_inventory_metrics(df_master, df_issues, df_po, csl_param, h_cost_pct, po_cost):
     df_issues['Date'] = pd.to_datetime(df_issues['Date'])
@@ -131,35 +190,38 @@ def calculate_inventory_metrics(df_master, df_issues, df_po, csl_param, h_cost_p
     final_df = df_master.merge(df_demand_stats, on='Item_Code', how='left').merge(df_lt_stats, on='Item_Code', how='left')
     final_df[['mu_D', 'sigma_D']] = final_df[['mu_D', 'sigma_D']].fillna(0)
     
-    # Calculate Annual Demand and ACV first to determine ABC classification
     final_df['Annual_Demand'] = final_df['mu_D'] * 365
     final_df['ACV'] = final_df['Annual_Demand'] * final_df['Unit_Cost']
     final_df = final_df.sort_values('ACV', ascending=False).reset_index(drop=True)
     final_df['Cum_ACV_Pct'] = final_df['ACV'].cumsum() / final_df['ACV'].sum()
     final_df['ABC_Class'] = final_df['Cum_ACV_Pct'].apply(lambda p: 'A' if p <= 0.7 else ('B' if p <= 0.9 else 'C'))
 
-    # Map each item's ABC classification to target CSL
     def get_target_csl_decimal(row):
         cls = row['ABC_Class']
-        if isinstance(csl_param, dict):
-            return csl_param.get(cls, 0.95)
-        else:
-            return float(csl_param)
+        return csl_param.get(cls, 0.95) if isinstance(csl_param, dict) else float(csl_param)
 
     final_df['Target_CSL_Decimal'] = final_df.apply(get_target_csl_decimal, axis=1)
-    final_df['Target_CSL'] = round(final_df['Target_CSL_Decimal'] * 100.0, 2)
-    final_df['Z_Score'] = final_df['Target_CSL_Decimal'].apply(lambda x: norm.ppf(x))
+    final_df['Target_CSL'] = round(final_df['Target_CSL_Decimal'] * 100.0, 1)
+    final_df['Z_Score'] = final_df['Target_CSL_Decimal'].apply(lambda x: round(norm.ppf(x), 2))
 
-    # Dual-stochastic safety stock formula: SS = Z * sqrt(mu_L * sigma_D^2 + mu_D^2 * sigma_L^2)
-    final_df['Safety_Stock'] = np.ceil(final_df['Z_Score'] * np.sqrt(final_df['mu_L'] * (final_df['sigma_D']**2) + (final_df['mu_D']**2) * (final_df['sigma_L']**2))).fillna(0)
-    final_df['ROP'] = np.ceil(final_df['mu_D'] * final_df['mu_L'] + final_df['Safety_Stock'])
+    # Dual-stochastic safety stock
+    final_df['Safety_Stock'] = np.ceil(
+        final_df['Z_Score'] * np.sqrt(
+            final_df['mu_L'] * (final_df['sigma_D']**2) + (final_df['mu_D']**2) * (final_df['sigma_L']**2)
+        )
+    ).fillna(0).astype(int)
+    
+    final_df['ROP'] = np.ceil(final_df['mu_D'] * final_df['mu_L'] + final_df['Safety_Stock']).astype(int)
     
     final_df['Raw_EOQ'] = np.sqrt((2 * po_cost * final_df['Annual_Demand']) / (h_cost_pct * final_df['Unit_Cost']))
-    final_df['Optimal_Order_Qty'] = final_df.apply(lambda r: max(r['Supplier_MOQ'], math.ceil(r['Raw_EOQ'] / r['Pack_Size']) * r['Pack_Size']), axis=1)
+    final_df['Optimal_Order_Qty'] = final_df.apply(
+        lambda r: int(max(r['Supplier_MOQ'], math.ceil(r['Raw_EOQ'] / (r['Pack_Size'] or 1)) * (r['Pack_Size'] or 1))), 
+        axis=1
+    )
     
     open_po = df_po.groupby('Item_Code')['Open_Pending_Qty'].sum().reset_index()
     final_df = final_df.merge(open_po, on='Item_Code', how='left')
-    final_df['Open_Pending_Qty'] = final_df['Open_Pending_Qty'].fillna(0)
+    final_df['Open_Pending_Qty'] = final_df['Open_Pending_Qty'].fillna(0).astype(int)
     
     def get_status(row):
         phys, ss, rop = row['Stores_Physical_Stock'], row['Safety_Stock'], row['ROP']
@@ -171,305 +233,226 @@ def calculate_inventory_metrics(df_master, df_issues, df_po, csl_param, h_cost_p
 
     final_df['Action_Status'] = final_df.apply(get_status, axis=1)
     
-    # Financial Impact & Excess Working Capital calculations
-    # Excess buffer = physical stock held in excess of (ROP + Safety Stock)
-    final_df['Excess_Qty'] = (final_df['Stores_Physical_Stock'] - (final_df['ROP'] + final_df['Safety_Stock'])).clip(lower=0)
+    # Financial Working Capital
+    final_df['Excess_Qty'] = (final_df['Stores_Physical_Stock'] - (final_df['ROP'] + final_df['Safety_Stock'])).clip(lower=0).astype(int)
     final_df['Excess_Capital_Locked'] = final_df['Excess_Qty'] * final_df['Unit_Cost']
     final_df['Order_Spend_Required'] = np.where(
         final_df['Action_Status'].isin(['CRITICAL STOCKOUT THREAT', 'RELEASE PURCHASE ORDER']),
         final_df['Optimal_Order_Qty'] * final_df['Unit_Cost'],
         0.0
     )
+    
+    # Stock Health Ratio for non-distorted visualization
+    final_df['Stock_Health_Ratio'] = np.where(
+        final_df['ROP'] > 0,
+        np.round((final_df['Stores_Physical_Stock'] / final_df['ROP']) * 100, 1),
+        100.0
+    )
 
     return final_df
 
-# --- HEADER & DATA SECURITY BANNER ---
-st.title("🏭 Plant Raw Material (RM) Inventory Optimization Engine")
+# --- HEADER & DATA SECURITY ---
+st.title("🏭 Plant Raw Material Inventory Optimization Engine")
 
 st.info(
-    "🔒 **Client-Side Privacy Guarantee:** All calculations run strictly in ephemeral memory (RAM) "
+    "🔒 **100% Client-Side Privacy Guarantee:** All calculations run strictly in ephemeral memory (RAM) "
     "during your active browser session. Uploaded files, item rates, and vendor registers "
-    "are never stored, logged, or saved to any external database or disk. "
-    "Closing this browser tab completely purges all data."
+    "are never stored, logged, or saved to any external database or disk. Closing this tab clears all data."
 )
 
-# --- SIDEBAR CONTROLS ---
-st.sidebar.header("Optimization Parameters")
-
+# --- SIDEBAR ---
+st.sidebar.header("⚙️ Optimization Parameters")
 enable_abc_csl = st.sidebar.toggle("Enable ABC Tiered Service Levels", value=False)
 
 if enable_abc_csl:
-    st.sidebar.markdown("#### Tiered CSL Targets")
     csl_a_val = st.sidebar.slider("Class A Target CSL %", 85.0, 99.9, 98.0, 0.5)
     csl_b_val = st.sidebar.slider("Class B Target CSL %", 80.0, 99.0, 95.0, 0.5)
     csl_c_val = st.sidebar.slider("Class C Target CSL %", 70.0, 98.0, 90.0, 0.5)
-    csl_dict = {
-        'A': csl_a_val / 100.0,
-        'B': csl_b_val / 100.0,
-        'C': csl_c_val / 100.0
-    }
-    st.sidebar.success(f"🎯 **ABC Tiered CSL Enabled:**\n* Class A: {csl_a_val}%\n* Class B: {csl_b_val}%\n* Class C: {csl_c_val}%")
-    csl_param = csl_dict
+    csl_param = {'A': csl_a_val / 100.0, 'B': csl_b_val / 100.0, 'C': csl_c_val / 100.0}
 else:
     csl_value = st.sidebar.slider("Cycle Service Level (CSL) %", 85.0, 99.9, 95.0, 0.1)
-    csl = csl_value / 100.0
-    csl_dict = {
-        'A': csl,
-        'B': csl,
-        'C': csl
-    }
-    csl_param = csl_dict
-
-    if csl_value >= 98:
-        st.sidebar.success(f"🎯 **High Service Level ({csl_value}%):** Minimized stockout risk, but requires higher safety stock investment.")
-    elif csl_value >= 90:
-        st.sidebar.info(f"⚖️ **Balanced Service Level ({csl_value}%):** A good trade-off between stock availability and holding costs.")
-    else:
-        st.sidebar.warning(f"⚠️ **Lean Service Level ({csl_value}%):** Reduced capital investment, but higher risk of occasional stockouts.")
+    csl_param = {'A': csl_value / 100.0, 'B': csl_value / 100.0, 'C': csl_value / 100.0}
 
 holding_cost_pct = st.sidebar.number_input("Holding Cost % (Annual)", 5.0, 50.0, 20.0) / 100.0
 po_admin_cost = st.sidebar.number_input("Fixed PO Admin Cost (₹ / $)", 1.0, 5000.0, 50.0)
 
-with st.sidebar.expander("💡 Cost Parameter Guide"):
-    st.markdown("""
-    **Understanding the Engine Metrics:**
-    *   **Avg Daily Demand (mu_D)**: The average quantity consumed each day.
-    *   **Demand Volatility (sigma_D)**: The standard deviation in daily usage.
-    *   **Avg Lead Time (mu_L)**: Average days taken from PO issuance to material arrival.
-    *   **Lead Time Volatility (sigma_L)**: The consistency of your suppliers.
-    *   **Recommended Safety Stock**: Buffer stock kept to mitigate demand/lead time spikes.
-    *   **Reorder Point (ROP)**: When stock hits this level, place a new PO.
-
-    ---
-
-    **Holding Cost % Calculation:**
-    Holding Cost % = Cost of Capital + Storage & Warehousing + Insurance & Obsolescence
-    *   *Rule of Thumb for MSMEs / Small Factories*: **18% to 25%** per year (Default: **20%**).
-
-    **Fixed PO Admin Cost Calculation:**
-    PO Cost = (Purchasing Dept Salaries + Software + Verification Overhead) / Total POs placed per year
-    *   *Typical Range*: **₹500 to ₹2,500 ($10 - $50)** per PO order.
-    """)
-
-# --- ONBOARDING & DATA GUIDE ---
+# --- FILE UPLOADS ---
 with st.expander("📖 Step-by-Step Data Onboarding Guide", expanded=False):
-    st.markdown("### How to Prepare and Upload Your Data")
     g1, g2, g3 = st.columns(3)
-    with g1:
-        st.markdown("#### 1. Item Master")
-        st.write("* SKU/Part#, Description, Current Stock, Unit Cost, MOQ, Pack Size, Lead Time.")
-    with g2:
-        st.markdown("#### 2. MTN Issues")
-        st.write("* Item Code, Date, Qty Issued.")
-    with g3:
-        st.markdown("#### 3. PO/GRN Register")
-        st.write("* Item Code, PO Date, GRN Date, Pending Qty.")
-    st.info("💡 Map your column headers using the assistant below after uploading.")
+    g1.markdown("**1. Item Master:** SKU, Description, Physical Stock, Cost, MOQ, Pack Size, Lead Days.")
+    g2.markdown("**2. MTN Issues:** Item Code, Date of Issue, Qty Issued.")
+    g3.markdown("**3. PO/GRN Register:** Item Code, PO Date, GRN Date, Pending Qty.")
 
-# --- UI INPUT TABS ---
 tab1, tab2 = st.tabs(["📂 Multi-File Upload", "📘 Single Workbook Upload"])
 df_master, df_issues, df_po = None, None, None
 
 with tab1:
-    st.info("Please upload the corresponding files to each section below:")
     c1, c2, c3 = st.columns(3)
-    f_m = c1.file_uploader("Upload Item Master", type=['csv', 'xlsx'], help="Upload your Item Master/SKU list file here.")
-    f_i = c2.file_uploader("Upload MTN Issues", type=['csv', 'xlsx'], help="Upload your Material Issues/Consumption history file here.")
-    f_p = c3.file_uploader("Upload PO/GRN Register", type=['csv', 'xlsx'], help="Upload your Purchase Order and Goods Received Note register here.")
-    
-    st.markdown("""
-    <style>
-    [data-testid="stFileUploader"] {
-        background-color: #2C7891 !important;
-        border: 1px solid #4893A9 !important;
-        border-radius: 8px;
-    }
-    [data-testid="stFileUploader"] label {
-        color: #FFFFFF !important;
-        font-weight: bold;
-    }
-    [data-testid="stFileUploader"] span {
-        color: #E0E7FF !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    
+    f_m = c1.file_uploader("Upload Item Master", type=['csv', 'xlsx'])
+    f_i = c2.file_uploader("Upload MTN Issues", type=['csv', 'xlsx'])
+    f_p = c3.file_uploader("Upload PO/GRN Register", type=['csv', 'xlsx'])
     if f_m and f_i and f_p:
         df_master = pd.read_csv(f_m) if f_m.name.endswith('.csv') else pd.read_excel(f_m)
         df_issues = pd.read_csv(f_i) if f_i.name.endswith('.csv') else pd.read_excel(f_i)
         df_po = pd.read_csv(f_p) if f_p.name.endswith('.csv') else pd.read_excel(f_p)
 
 with tab2:
-    f_all = st.file_uploader("3-sheet Workbook (Item Master, Issues, PO Register)", type=['xlsx'])
+    f_all = st.file_uploader("Upload 3-Sheet Workbook", type=['xlsx'])
     if f_all:
         xls = pd.ExcelFile(f_all)
-        s = xls.sheet_names
-        if len(s) >= 3:
-            df_master = pd.read_excel(xls, sheet_name=s[0])
-            df_issues = pd.read_excel(xls, sheet_name=s[1])
-            df_po = pd.read_excel(xls, sheet_name=s[2])
-        else:
-            st.error("Uploaded workbook must have at least 3 sheets (Item Master, Issues, PO/GRN).")
+        if len(xls.sheet_names) >= 3:
+            df_master = pd.read_excel(xls, sheet_name=0)
+            df_issues = pd.read_excel(xls, sheet_name=1)
+            df_po = pd.read_excel(xls, sheet_name=2)
 
-# --- EXECUTION & RESULTS ---
+# --- EXECUTION ---
 if df_master is not None and df_issues is not None and df_po is not None:
     st.subheader("🛠️ Column Mapping Assistant")
-    with st.expander("Configure Column Mappings", expanded=True):
+    with st.expander("Verify Column Mappings", expanded=True):
         m1, m2, m3 = st.columns(3)
         with m1: df_master = get_user_column_mapping(df_master, ['Item_Code', 'Description', 'Category', 'Stores_Physical_Stock', 'Unit_Cost', 'Supplier_MOQ', 'Pack_Size', 'Default_Lead_Days'], "Item Master")
         with m2: df_issues = get_user_column_mapping(df_issues, ['Item_Code', 'Date', 'Qty_Issued'], "MTN Issues")
-        with m3: df_po = get_user_column_mapping(df_po, ['Item_Code', 'PO_Date', 'GRN_Date', 'Open_Pending_Qty'], "PO/GRN Register")
+        with m3: df_po = get_user_column_mapping(df_po, ['Item_Code', 'PO_Date', 'GRN_Date', 'Open_Pending_Qty'], "PO Register")
 
     if st.button("🚀 Run Optimization Engine", type="primary"):
-        with st.spinner("Crunching dual-stochastic distributions and working capital impact..."):
+        with st.spinner("Crunching inventory statistics and working capital models..."):
             results = calculate_inventory_metrics(df_master, df_issues, df_po, csl_param, holding_cost_pct, po_admin_cost)
             
-            # --- 1. EXECUTIVE SNAPSHOT (Working Capital & Risk) ---
+            # --- 1. CRISP WORKING CAPITAL KPI HERO CARDS ---
             st.markdown("---")
-            st.subheader("💼 Working Capital & Stockout Impact")
+            st.markdown("### 💼 Working Capital & Risk Executive Summary")
             
-            critical_items = results[results['Action_Status'] == 'CRITICAL STOCKOUT THREAT']
-            order_items = results[results['Action_Status'] == 'RELEASE PURCHASE ORDER']
-            total_action_needed = len(critical_items) + len(order_items)
-            
-            total_immediate_spend = results['Order_Spend_Required'].sum()
+            crit_count = len(results[results['Action_Status'] == 'CRITICAL STOCKOUT THREAT'])
+            order_count = len(results[results['Action_Status'] == 'RELEASE PURCHASE ORDER'])
+            total_action_needed = crit_count + order_count
+            total_po_spend = results['Order_Spend_Required'].sum()
             total_locked_capital = results['Excess_Capital_Locked'].sum()
             
-            kpi1, kpi2, kpi3 = st.columns(3)
-            kpi1.metric(
-                label="⚠️ SKUs Requiring Immediate Action",
-                value=f"{total_action_needed} SKUs",
-                delta=f"{len(critical_items)} Stockout Threats" if len(critical_items) > 0 else "No Critical Outages",
-                delta_color="inverse"
-            )
-            kpi2.metric(
-                label="💳 Immediate Procurement Spend Needed",
-                value=f"{total_immediate_spend:,.2f}",
-                help="Total purchase value required right now to bring depleted items back above safe reorder levels."
-            )
-            kpi3.metric(
-                label="🔓 Idle Capital in Excess Stock",
-                value=f"{total_locked_capital:,.2f}",
-                help="Working capital tied up in stock exceeding ROP + Safety Stock that can be phased down to release cash."
-            )
+            kpi_html = f"""
+            <div class="kpi-container">
+                <div class="kpi-card">
+                    <div class="kpi-title">⚠️ Action Required SKUs</div>
+                    <div class="kpi-value">{total_action_needed} <span style="font-size:16px; font-weight:500; color:#94A3B8;">Items</span></div>
+                    <span class="kpi-badge badge-red">{crit_count} Stockout Threats</span>
+                    <span class="kpi-badge badge-amber">{order_count} Reorder Triggers</span>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-title">💳 Immediate Procurement Spend</div>
+                    <div class="kpi-value">₹{total_po_spend:,.2f}</div>
+                    <span class="kpi-badge badge-amber">PO Capital Required Today</span>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-title">🔓 Idle Capital Locked in Excess Stock</div>
+                    <div class="kpi-value">₹{total_locked_capital:,.2f}</div>
+                    <span class="kpi-badge badge-green">Recoverable Free Cash</span>
+                </div>
+            </div>
+            """
+            st.markdown(kpi_html, unsafe_allow_html=True)
             
-            # --- 2. ACTION TRIAGE MATRIX ---
-            st.markdown("---")
-            st.subheader("🎯 Inventory Action Triage")
+            # --- 2. CLEAN ACTION TRIAGE TABLE ---
+            st.markdown("### 🎯 Inventory Action Triage Matrix")
             
-            def color_status(val):
-                badge_styles = {
-                    'CRITICAL STOCKOUT THREAT': {'bg': '#FEE2E2', 'text': '#991B1B'},
-                    'RELEASE PURCHASE ORDER': {'bg': '#FEF3C7', 'text': '#92400E'},
-                    'EXPEDITE IN-TRANSIT GRN': {'bg': '#E0E7FF', 'text': '#3730A3'},
-                    'HEALTHY INVENTORY': {'bg': '#D1FAE5', 'text': '#065F46'},
+            def highlight_status(val):
+                colors = {
+                    'CRITICAL STOCKOUT THREAT': 'background-color: #7F1D1D; color: #FCA5A5; font-weight: bold;',
+                    'RELEASE PURCHASE ORDER': 'background-color: #78350F; color: #FDE68A; font-weight: bold;',
+                    'EXPEDITE IN-TRANSIT GRN': 'background-color: #1E3A8A; color: #BFDBFE; font-weight: bold;',
+                    'HEALTHY INVENTORY': 'background-color: #064E3B; color: #6EE7B7; font-weight: bold;',
                 }
-                style = badge_styles.get(val, {'bg': '#FFFFFF', 'text': '#1E293B'})
-                return f'background-color: {style["bg"]}; color: {style["text"]}; font-weight: bold; border-radius: 4px;'
+                return colors.get(val, '')
+
+            # Format integers cleanly without decimals
+            display_df = results[[
+                'Item_Code', 'Description', 'ABC_Class', 'Stores_Physical_Stock', 
+                'Open_Pending_Qty', 'Safety_Stock', 'ROP', 
+                'Optimal_Order_Qty', 'Action_Status'
+            ]].copy()
             
-            results_display = results.rename(columns={
-                'mu_D': 'Avg Daily Demand', 
-                'sigma_D': 'Demand Volatility', 
-                'mu_L': 'Avg Lead Time (Days)', 
-                'sigma_L': 'Lead Time Volatility', 
-                'Safety_Stock': 'Recommended Safety Stock', 
-                'ROP': 'Reorder Point', 
-                'Optimal_Order_Qty': 'Optimal Order Qty', 
-                'Target_CSL': 'Target CSL (%)', 
-                'Z_Score': 'Z-Score'
+            display_df = display_df.rename(columns={
+                'Safety_Stock': 'Recommended Safety Stock',
+                'ROP': 'Reorder Point',
+                'Optimal_Order_Qty': 'Optimal Order Qty'
             })
             
-            display_cols = [
-                'Item_Code', 'Description', 'ABC_Class', 'Stores_Physical_Stock', 
-                'Open_Pending_Qty', 'Recommended Safety Stock', 'Reorder Point', 
-                'Optimal Order Qty', 'Action_Status'
-            ]
+            st.dataframe(
+                display_df.style.map(highlight_status, subset=['Action_Status']),
+                use_container_width=True
+            )
             
-            with st.container(border=True):
-                st.dataframe(results_display[display_cols].style.map(color_status, subset=['Action_Status']), use_container_width=True)
-            
-            # --- 3. ANALYTICAL VISUALIZATION ---
+            # --- 3. HIGH-RESOLUTION DUAL CHARTS ---
             st.markdown("---")
-            with st.expander("📊 Deep-Dive Visualizations & Chart Analytics", expanded=False):
-                fig = px.bar(
-                    results, 
-                    x='Item_Code', 
-                    y=['Stores_Physical_Stock', 'Safety_Stock', 'ROP'], 
-                    barmode='group',
-                    title="Physical Stock vs. Safety Buffer & Reorder Point",
-                    labels={'value': 'Units', 'variable': 'Inventory Metric'}
-                )
-                fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#FFFFFF')
-                st.plotly_chart(fig, use_container_width=True)
+            with st.expander("📊 Visual Analytics: Stock Health vs. ROP Buffer", expanded=True):
+                c_tab1, c_tab2 = st.tabs(["⚡ Normalized Stock Health (% of ROP)", "📦 Absolute Unit Comparison"])
+                
+                with c_tab1:
+                    # Ratio chart solves the distortion where FST-102 swamps small items
+                    fig_ratio = px.bar(
+                        results,
+                        x='Item_Code',
+                        y='Stock_Health_Ratio',
+                        color='Action_Status',
+                        color_discrete_map={
+                            'CRITICAL STOCKOUT THREAT': '#EF4444',
+                            'RELEASE PURCHASE ORDER': '#F59E0B',
+                            'EXPEDITE IN-TRANSIT GRN': '#3B82F6',
+                            'HEALTHY INVENTORY': '#10B981'
+                        },
+                        title="Stock Health Index (% of Reorder Point Covered by Physical Stock)",
+                        labels={'Stock_Health_Ratio': 'Stock / ROP (%)', 'Item_Code': 'SKU'}
+                    )
+                    fig_ratio.add_hline(y=100, line_dash="dash", line_color="#F8FAFC", annotation_text="100% ROP Threshold")
+                    fig_ratio.update_layout(
+                        paper_bgcolor='#1E293B',
+                        plot_bgcolor='#1E293B',
+                        font=dict(color='#F8FAFC'),
+                        height=420
+                    )
+                    st.plotly_chart(fig_ratio, use_container_width=True)
+                
+                with c_tab2:
+                    fig_units = go.Figure()
+                    fig_units.add_trace(go.Bar(x=results['Item_Code'], y=results['Stores_Physical_Stock'], name='Physical Stock', marker_color='#38BDF8'))
+                    fig_units.add_trace(go.Bar(x=results['Item_Code'], y=results['Safety_Stock'], name='Safety Stock', marker_color='#F43F5E'))
+                    fig_units.add_trace(go.Bar(x=results['Item_Code'], y=results['ROP'], name='Reorder Point', marker_color='#FBBF24'))
+                    fig_units.update_layout(
+                        barmode='group',
+                        paper_bgcolor='#1E293B',
+                        plot_bgcolor='#1E293B',
+                        font=dict(color='#F8FAFC'),
+                        title="Physical Units vs. Safety Buffer & ROP",
+                        height=420
+                    )
+                    st.plotly_chart(fig_units, use_container_width=True)
 
-            # --- 4. EXCEL REPORT BUILDER ---
+            # --- 4. EXCEL EXPORT & ADVISORY CTA ---
             buf = io.BytesIO()
             with pd.ExcelWriter(buf, engine='xlsxwriter') as writer:
-                results_display.to_excel(writer, sheet_name='Inventory_Optimization', index=False)
-                workbook, worksheet = writer.book, writer.sheets['Inventory_Optimization']
-                
-                header_format = workbook.add_format({
-                    'bold': True, 
-                    'bg_color': '#1F4E78', 
-                    'font_color': 'white', 
-                    'border': 1,
-                    'align': 'center',
-                    'valign': 'vcenter'
-                })
-                header_format.set_font_size(12)
-                
-                status_colors = {
-                    'CRITICAL STOCKOUT THREAT': {'bg': '#FEE2E2', 'text': '#991B1B'},
-                    'RELEASE PURCHASE ORDER': {'bg': '#FEF3C7', 'text': '#92400E'},
-                    'EXPEDITE IN-TRANSIT GRN': {'bg': '#E0E7FF', 'text': '#3730A3'},
-                    'HEALTHY INVENTORY': {'bg': '#D1FAE5', 'text': '#065F46'},
-                }
-                
-                row_format_white = workbook.add_format({'border': 1, 'border_color': '#E2E8F0'})
-                row_format_gray = workbook.add_format({'bg_color': '#F8FAFC', 'border': 1, 'border_color': '#E2E8F0'})
-                
-                for col_num, value in enumerate(results_display.columns.values):
-                    worksheet.write(0, col_num, value, header_format)
-                    worksheet.set_column(col_num, col_num, max(len(str(value)) + 4, 12))
-                
-                for row_num, (index, row) in enumerate(results_display.iterrows()):
-                    status = row['Action_Status']
-                    status_fmt = workbook.add_format({
-                        'bg_color': status_colors.get(status, {}).get('bg', '#FFFFFF'), 
-                        'font_color': status_colors.get(status, {}).get('text', '#000000'),
-                        'border': 1,
-                        'border_color': '#E2E8F0'
-                    })
-                    
-                    row_fmt = row_format_gray if row_num % 2 == 1 else row_format_white
-                    
-                    for col_num in range(len(results_display.columns)):
-                        col_name = results_display.columns[col_num]
-                        if col_name == 'Action_Status':
-                            worksheet.write(row_num + 1, col_num, status, status_fmt)
-                        else:
-                            worksheet.write(row_num + 1, col_num, row[col_name], row_fmt)
+                results.to_excel(writer, sheet_name='Inventory_Optimization', index=False)
+                wb, ws = writer.book, writer.sheets['Inventory_Optimization']
+                h_fmt = wb.add_format({'bold': True, 'bg_color': '#0F172A', 'font_color': '#FFFFFF', 'border': 1})
+                for col_idx, val in enumerate(results.columns):
+                    ws.write(0, col_idx, val, h_fmt)
+                    ws.set_column(col_idx, col_idx, max(len(str(val)) + 4, 12))
 
             st.divider()
-            
-            # --- 5. EXPORT & MONETIZATION / FEEDBACK CTA ---
-            d_col1, d_col2 = st.columns([1, 1])
-            with d_col1:
+            d1, d2 = st.columns([1, 1])
+            with d1:
                 st.download_button(
-                    label="📥 Download Full Executive Optimization Report",
+                    "📥 Download Formatted Audit Report (Excel)",
                     data=buf.getvalue(),
                     file_name=f"Inventory_Optimization_Report_{datetime.now().strftime('%Y%m%d')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
-            with d_col2:
-                st.link_button("📝 Share Feedback / Report a Feature Request", "https://docs.google.com/forms/d/e/1FAIpQLSee7lV13AZ4594w2ZmzvB4mfUOMCOLPBbhQss-I37ng_gkksA/viewform?usp=sf_link")
+            with d2:
+                st.link_button("📝 Share Feedback & Feature Request", "https://docs.google.com/forms/d/e/1FAIpQLSee7lV13AZ4594w2ZmzvB4mfUOMCOLPBbhQss-I37ng_gkksA/viewform?usp=sf_link")
 
-            # High-conversion advisory banner for small business owners
             st.markdown("""
             <div class="consult-banner">
-                <h4>🤝 Need a Customized Plant or Warehouse Inventory Audit?</h4>
-                <p>Dealing with chronic supplier delays, dead stock, or want automated Tally / ERP integrations tailored to your factory? 
-                Get a 1-on-1 expert diagnostic to optimize working capital and service levels.</p>
-                <p>👉 <b>Reach out directly:</b> Connect via LinkedIn or reply through our feedback form to request an audit.</p>
+                <h4 style="margin:0 0 8px 0; color:#FFFFFF;">🤝 Want a Custom Plant or Warehouse Inventory Audit?</h4>
+                <p style="margin:0; font-size:14px; color:#E0E7FF; line-height:1.5;">
+                    Dealing with supplier delays, dead stock, or want automated Tally / ERP synchronization built for your operations? 
+                    Get a 1-on-1 expert diagnostic to optimize working capital and service levels.
+                </p>
             </div>
             """, unsafe_allow_html=True)
