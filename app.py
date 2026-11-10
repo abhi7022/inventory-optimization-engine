@@ -8,7 +8,7 @@ from datetime import datetime
 import plotly.express as px
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="RM Inventory Optimization Engine", layout="wide")
+st.set_page_config(page_title="RM Inventory Optimization Engine", layout="wide", page_icon="🏭")
 
 # Modern UI styling
 st.markdown("""
@@ -17,7 +17,7 @@ st.markdown("""
     .stMetric { background-color: #2C7891; padding: 20px; border-radius: 10px; border: 1px solid #4893A9; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); margin: 10px 0; }
     .stMetric > label { color: #E0E7FF; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
     .stMetric > div { color: #FFFFFF; }
-    h1, h2 { color: #FFFFFF; }
+    h1, h2, h3 { color: #FFFFFF; }
     .stDataFrame, .stTable { background-color: #2C7891; }
     
     /* Clean button and download button styling */
@@ -34,6 +34,14 @@ st.markdown("""
         background-color: #F8FAFC !important;
         border-color: #94A3B8 !important;
         color: #0F172A !important;
+    }
+    .consult-banner {
+        background: linear-gradient(135deg, #0F766E 0%, #115E59 100%);
+        border: 1px solid #2DD4BF;
+        border-radius: 10px;
+        padding: 18px 24px;
+        margin-top: 25px;
+        color: #FFFFFF;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -64,7 +72,7 @@ def get_user_column_mapping(df, expected_cols, file_name):
         syns = SYNONYMS.get(expected, [expected.lower()])
         default_idx = 0
         
-        # 1. Exact match (case insensitive, ignoring spaces/underscores)
+        # 1. Exact match
         found = False
         for i, col in enumerate(cols):
             clean_col = col.strip().lower().replace(" ", "_")
@@ -73,7 +81,7 @@ def get_user_column_mapping(df, expected_cols, file_name):
                 found = True
                 break
         
-        # 2. Substring match if exact match failed
+        # 2. Substring match
         if not found:
             for i, col in enumerate(cols):
                 clean_col = col.strip().lower().replace(" ", "_")
@@ -130,7 +138,7 @@ def calculate_inventory_metrics(df_master, df_issues, df_po, csl_param, h_cost_p
     final_df['Cum_ACV_Pct'] = final_df['ACV'].cumsum() / final_df['ACV'].sum()
     final_df['ABC_Class'] = final_df['Cum_ACV_Pct'].apply(lambda p: 'A' if p <= 0.7 else ('B' if p <= 0.9 else 'C'))
 
-    # Map each item's ABC classification to its respective target CSL
+    # Map each item's ABC classification to target CSL
     def get_target_csl_decimal(row):
         cls = row['ABC_Class']
         if isinstance(csl_param, dict):
@@ -142,8 +150,7 @@ def calculate_inventory_metrics(df_master, df_issues, df_po, csl_param, h_cost_p
     final_df['Target_CSL'] = round(final_df['Target_CSL_Decimal'] * 100.0, 2)
     final_df['Z_Score'] = final_df['Target_CSL_Decimal'].apply(lambda x: norm.ppf(x))
 
-    # Apply item-level Z-score to the dual-stochastic safety stock formula:
-    # SS = Z * sqrt(mu_L * sigma_D^2 + mu_D^2 * sigma_L^2)
+    # Dual-stochastic safety stock formula: SS = Z * sqrt(mu_L * sigma_D^2 + mu_D^2 * sigma_L^2)
     final_df['Safety_Stock'] = np.ceil(final_df['Z_Score'] * np.sqrt(final_df['mu_L'] * (final_df['sigma_D']**2) + (final_df['mu_D']**2) * (final_df['sigma_L']**2))).fillna(0)
     final_df['ROP'] = np.ceil(final_df['mu_D'] * final_df['mu_L'] + final_df['Safety_Stock'])
     
@@ -163,9 +170,28 @@ def calculate_inventory_metrics(df_master, df_issues, df_po, csl_param, h_cost_p
         return "HEALTHY INVENTORY"
 
     final_df['Action_Status'] = final_df.apply(get_status, axis=1)
+    
+    # Financial Impact & Excess Working Capital calculations
+    # Excess buffer = physical stock held in excess of (ROP + Safety Stock)
+    final_df['Excess_Qty'] = (final_df['Stores_Physical_Stock'] - (final_df['ROP'] + final_df['Safety_Stock'])).clip(lower=0)
+    final_df['Excess_Capital_Locked'] = final_df['Excess_Qty'] * final_df['Unit_Cost']
+    final_df['Order_Spend_Required'] = np.where(
+        final_df['Action_Status'].isin(['CRITICAL STOCKOUT THREAT', 'RELEASE PURCHASE ORDER']),
+        final_df['Optimal_Order_Qty'] * final_df['Unit_Cost'],
+        0.0
+    )
+
     return final_df
 
+# --- HEADER & DATA SECURITY BANNER ---
 st.title("🏭 Plant Raw Material (RM) Inventory Optimization Engine")
+
+st.info(
+    "🔒 **Client-Side Privacy Guarantee:** All calculations run strictly in ephemeral memory (RAM) "
+    "during your active browser session. Uploaded files, item rates, and vendor registers "
+    "are never stored, logged, or saved to any external database or disk. "
+    "Closing this browser tab completely purges all data."
+)
 
 # --- SIDEBAR CONTROLS ---
 st.sidebar.header("Optimization Parameters")
@@ -194,7 +220,6 @@ else:
     }
     csl_param = csl_dict
 
-    # Dynamic explanation based on the chosen CSL
     if csl_value >= 98:
         st.sidebar.success(f"🎯 **High Service Level ({csl_value}%):** Minimized stockout risk, but requires higher safety stock investment.")
     elif csl_value >= 90:
@@ -203,7 +228,7 @@ else:
         st.sidebar.warning(f"⚠️ **Lean Service Level ({csl_value}%):** Reduced capital investment, but higher risk of occasional stockouts.")
 
 holding_cost_pct = st.sidebar.number_input("Holding Cost % (Annual)", 5.0, 50.0, 20.0) / 100.0
-po_admin_cost = st.sidebar.number_input("Fixed PO Admin Cost ($)", 1.0, 1000.0, 50.0)
+po_admin_cost = st.sidebar.number_input("Fixed PO Admin Cost (₹ / $)", 1.0, 5000.0, 50.0)
 
 with st.sidebar.expander("💡 Cost Parameter Guide"):
     st.markdown("""
@@ -218,12 +243,12 @@ with st.sidebar.expander("💡 Cost Parameter Guide"):
     ---
 
     **Holding Cost % Calculation:**
-    Holding Cost % = Capital Rate + Storage Costs + Insurance & Waste
-    *   *Rule of Thumb for small factories*: **18% to 25%** per year (Default: **20%**).
+    Holding Cost % = Cost of Capital + Storage & Warehousing + Insurance & Obsolescence
+    *   *Rule of Thumb for MSMEs / Small Factories*: **18% to 25%** per year (Default: **20%**).
 
-    **Fixed PO Admin Cost ($) Calculation:**
-    PO Cost = (Purchasing Dept Salaries + Software Costs) / Total POs per Year
-    *   *Typical Range*: **$30 to $100 per PO** (Default: **$50**).
+    **Fixed PO Admin Cost Calculation:**
+    PO Cost = (Purchasing Dept Salaries + Software + Verification Overhead) / Total POs placed per year
+    *   *Typical Range*: **₹500 to ₹2,500 ($10 - $50)** per PO order.
     """)
 
 # --- ONBOARDING & DATA GUIDE ---
@@ -254,7 +279,6 @@ with tab1:
     
     st.markdown("""
     <style>
-    /* Improve visibility of upload area text */
     [data-testid="stFileUploader"] {
         background-color: #2C7891 !important;
         border: 1px solid #4893A9 !important;
@@ -275,6 +299,19 @@ with tab1:
         df_issues = pd.read_csv(f_i) if f_i.name.endswith('.csv') else pd.read_excel(f_i)
         df_po = pd.read_csv(f_p) if f_p.name.endswith('.csv') else pd.read_excel(f_p)
 
+with tab2:
+    f_all = st.file_uploader("3-sheet Workbook (Item Master, Issues, PO Register)", type=['xlsx'])
+    if f_all:
+        xls = pd.ExcelFile(f_all)
+        s = xls.sheet_names
+        if len(s) >= 3:
+            df_master = pd.read_excel(xls, sheet_name=s[0])
+            df_issues = pd.read_excel(xls, sheet_name=s[1])
+            df_po = pd.read_excel(xls, sheet_name=s[2])
+        else:
+            st.error("Uploaded workbook must have at least 3 sheets (Item Master, Issues, PO/GRN).")
+
+# --- EXECUTION & RESULTS ---
 if df_master is not None and df_issues is not None and df_po is not None:
     st.subheader("🛠️ Column Mapping Assistant")
     with st.expander("Configure Column Mappings", expanded=True):
@@ -283,86 +320,156 @@ if df_master is not None and df_issues is not None and df_po is not None:
         with m2: df_issues = get_user_column_mapping(df_issues, ['Item_Code', 'Date', 'Qty_Issued'], "MTN Issues")
         with m3: df_po = get_user_column_mapping(df_po, ['Item_Code', 'PO_Date', 'GRN_Date', 'Open_Pending_Qty'], "PO/GRN Register")
 
-    if st.button("🚀 Run Optimization Engine"):
-        results = calculate_inventory_metrics(df_master, df_issues, df_po, csl_param, holding_cost_pct, po_admin_cost)
-        st.subheader("📊 Inventory vs. Safety Stock Analysis")
-        fig = px.bar(results, x='Item_Code', y=['Stores_Physical_Stock', 'Safety_Stock'], barmode='group')
-        st.plotly_chart(fig, use_container_width=True)
-        st.subheader("Inventory Action Triage")
-        def color_status(val):
-            badge_styles = {
-                'CRITICAL STOCKOUT THREAT': {'bg': '#FEE2E2', 'text': '#991B1B'},
-                'RELEASE PURCHASE ORDER': {'bg': '#FEF3C7', 'text': '#92400E'},
-                'EXPEDITE IN-TRANSIT GRN': {'bg': '#FEF3C7', 'text': '#92400E'},
-                'HEALTHY INVENTORY': {'bg': '#D1FAE5', 'text': '#065F46'},
-            }
-            style = badge_styles.get(val, {'bg': '#FFFFFF', 'text': '#1E293B'})
-            return f'background-color: {style["bg"]}; color: {style["text"]}; font-weight: bold; border-radius: 4px;'
-        
-        results_display = results.rename(columns={'mu_D': 'Avg Daily Demand', 'sigma_D': 'Demand Volatility', 'mu_L': 'Avg Lead Time (Days)', 'sigma_L': 'Lead Time Volatility', 'Safety_Stock': 'Recommended Safety Stock', 'ROP': 'Reorder Point', 'Optimal_Order_Qty': 'Optimal Order Qty', 'Target_CSL': 'Target CSL (%)', 'Z_Score': 'Z-Score'})
-        cols = ['Item_Code', 'Description', 'ABC_Class', 'Target CSL (%)', 'Z-Score', 'Stores_Physical_Stock', 'Recommended Safety Stock', 'Reorder Point', 'Optimal Order Qty', 'Action_Status']
-        
-        with st.container(border=True):
-            st.dataframe(results_display[cols].style.map(color_status, subset=['Action_Status']), use_container_width=True)
+    if st.button("🚀 Run Optimization Engine", type="primary"):
+        with st.spinner("Crunching dual-stochastic distributions and working capital impact..."):
+            results = calculate_inventory_metrics(df_master, df_issues, df_po, csl_param, holding_cost_pct, po_admin_cost)
             
-        buf = io.BytesIO()
-        with pd.ExcelWriter(buf, engine='xlsxwriter') as writer:
-            results_display.to_excel(writer, sheet_name='Inventory_Optimization', index=False)
-            workbook, worksheet = writer.book, writer.sheets['Inventory_Optimization']
+            # --- 1. EXECUTIVE SNAPSHOT (Working Capital & Risk) ---
+            st.markdown("---")
+            st.subheader("💼 Working Capital & Stockout Impact")
             
-            header_format = workbook.add_format({
-                'bold': True, 
-                'bg_color': '#1F4E78', 
-                'font_color': 'white', 
-                'border': 1,
-                'align': 'center',
-                'valign': 'vcenter'
+            critical_items = results[results['Action_Status'] == 'CRITICAL STOCKOUT THREAT']
+            order_items = results[results['Action_Status'] == 'RELEASE PURCHASE ORDER']
+            total_action_needed = len(critical_items) + len(order_items)
+            
+            total_immediate_spend = results['Order_Spend_Required'].sum()
+            total_locked_capital = results['Excess_Capital_Locked'].sum()
+            
+            kpi1, kpi2, kpi3 = st.columns(3)
+            kpi1.metric(
+                label="⚠️ SKUs Requiring Immediate Action",
+                value=f"{total_action_needed} SKUs",
+                delta=f"{len(critical_items)} Stockout Threats" if len(critical_items) > 0 else "No Critical Outages",
+                delta_color="inverse"
+            )
+            kpi2.metric(
+                label="💳 Immediate Procurement Spend Needed",
+                value=f"{total_immediate_spend:,.2f}",
+                help="Total purchase value required right now to bring depleted items back above safe reorder levels."
+            )
+            kpi3.metric(
+                label="🔓 Idle Capital in Excess Stock",
+                value=f"{total_locked_capital:,.2f}",
+                help="Working capital tied up in stock exceeding ROP + Safety Stock that can be phased down to release cash."
+            )
+            
+            # --- 2. ACTION TRIAGE MATRIX ---
+            st.markdown("---")
+            st.subheader("🎯 Inventory Action Triage")
+            
+            def color_status(val):
+                badge_styles = {
+                    'CRITICAL STOCKOUT THREAT': {'bg': '#FEE2E2', 'text': '#991B1B'},
+                    'RELEASE PURCHASE ORDER': {'bg': '#FEF3C7', 'text': '#92400E'},
+                    'EXPEDITE IN-TRANSIT GRN': {'bg': '#E0E7FF', 'text': '#3730A3'},
+                    'HEALTHY INVENTORY': {'bg': '#D1FAE5', 'text': '#065F46'},
+                }
+                style = badge_styles.get(val, {'bg': '#FFFFFF', 'text': '#1E293B'})
+                return f'background-color: {style["bg"]}; color: {style["text"]}; font-weight: bold; border-radius: 4px;'
+            
+            results_display = results.rename(columns={
+                'mu_D': 'Avg Daily Demand', 
+                'sigma_D': 'Demand Volatility', 
+                'mu_L': 'Avg Lead Time (Days)', 
+                'sigma_L': 'Lead Time Volatility', 
+                'Safety_Stock': 'Recommended Safety Stock', 
+                'ROP': 'Reorder Point', 
+                'Optimal_Order_Qty': 'Optimal Order Qty', 
+                'Target_CSL': 'Target CSL (%)', 
+                'Z_Score': 'Z-Score'
             })
-            header_format.set_font_size(12)
             
-            # Status colors matching UI
-            status_colors = {
-                'CRITICAL STOCKOUT THREAT': {'bg': '#FEE2E2', 'text': '#991B1B'},
-                'RELEASE PURCHASE ORDER': {'bg': '#FEF3C7', 'text': '#92400E'},
-                'EXPEDITE IN-TRANSIT GRN': {'bg': '#FEF3C7', 'text': '#92400E'},
-                'HEALTHY INVENTORY': {'bg': '#D1FAE5', 'text': '#065F46'},
-            }
+            display_cols = [
+                'Item_Code', 'Description', 'ABC_Class', 'Stores_Physical_Stock', 
+                'Open_Pending_Qty', 'Recommended Safety Stock', 'Reorder Point', 
+                'Optimal Order Qty', 'Action_Status'
+            ]
             
-            # Zebra striping formats
-            row_format_white = workbook.add_format({'border': 1, 'border_color': '#E2E8F0'})
-            row_format_gray = workbook.add_format({'bg_color': '#F8FAFC', 'border': 1, 'border_color': '#E2E8F0'})
+            with st.container(border=True):
+                st.dataframe(results_display[display_cols].style.map(color_status, subset=['Action_Status']), use_container_width=True)
             
-            for col_num, value in enumerate(results_display.columns.values):
-                worksheet.write(0, col_num, value, header_format)
-                worksheet.set_column(col_num, col_num, len(str(value)) + 4)
-            
-            for row_num, (index, row) in enumerate(results_display.iterrows()):
-                status = row['Action_Status']
-                status_fmt = workbook.add_format({
-                    'bg_color': status_colors[status]['bg'], 
-                    'font_color': status_colors[status]['text'],
+            # --- 3. ANALYTICAL VISUALIZATION ---
+            st.markdown("---")
+            with st.expander("📊 Deep-Dive Visualizations & Chart Analytics", expanded=False):
+                fig = px.bar(
+                    results, 
+                    x='Item_Code', 
+                    y=['Stores_Physical_Stock', 'Safety_Stock', 'ROP'], 
+                    barmode='group',
+                    title="Physical Stock vs. Safety Buffer & Reorder Point",
+                    labels={'value': 'Units', 'variable': 'Inventory Metric'}
+                )
+                fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#FFFFFF')
+                st.plotly_chart(fig, use_container_width=True)
+
+            # --- 4. EXCEL REPORT BUILDER ---
+            buf = io.BytesIO()
+            with pd.ExcelWriter(buf, engine='xlsxwriter') as writer:
+                results_display.to_excel(writer, sheet_name='Inventory_Optimization', index=False)
+                workbook, worksheet = writer.book, writer.sheets['Inventory_Optimization']
+                
+                header_format = workbook.add_format({
+                    'bold': True, 
+                    'bg_color': '#1F4E78', 
+                    'font_color': 'white', 
                     'border': 1,
-                    'border_color': '#E2E8F0'
+                    'align': 'center',
+                    'valign': 'vcenter'
                 })
+                header_format.set_font_size(12)
                 
-                # Apply zebra striping to non-status columns
-                row_fmt = row_format_gray if row_num % 2 == 1 else row_format_white
+                status_colors = {
+                    'CRITICAL STOCKOUT THREAT': {'bg': '#FEE2E2', 'text': '#991B1B'},
+                    'RELEASE PURCHASE ORDER': {'bg': '#FEF3C7', 'text': '#92400E'},
+                    'EXPEDITE IN-TRANSIT GRN': {'bg': '#E0E7FF', 'text': '#3730A3'},
+                    'HEALTHY INVENTORY': {'bg': '#D1FAE5', 'text': '#065F46'},
+                }
                 
-                for col_num in range(len(results_display.columns)):
-                    col_name = results_display.columns[col_num]
-                    if col_name == 'Action_Status':
-                        worksheet.write(row_num + 1, col_num, status, status_fmt)
-                    else:
-                        worksheet.write(row_num + 1, col_num, row[col_name], row_fmt)
+                row_format_white = workbook.add_format({'border': 1, 'border_color': '#E2E8F0'})
+                row_format_gray = workbook.add_format({'bg_color': '#F8FAFC', 'border': 1, 'border_color': '#E2E8F0'})
+                
+                for col_num, value in enumerate(results_display.columns.values):
+                    worksheet.write(0, col_num, value, header_format)
+                    worksheet.set_column(col_num, col_num, max(len(str(value)) + 4, 12))
+                
+                for row_num, (index, row) in enumerate(results_display.iterrows()):
+                    status = row['Action_Status']
+                    status_fmt = workbook.add_format({
+                        'bg_color': status_colors.get(status, {}).get('bg', '#FFFFFF'), 
+                        'font_color': status_colors.get(status, {}).get('text', '#000000'),
+                        'border': 1,
+                        'border_color': '#E2E8F0'
+                    })
+                    
+                    row_fmt = row_format_gray if row_num % 2 == 1 else row_format_white
+                    
+                    for col_num in range(len(results_display.columns)):
+                        col_name = results_display.columns[col_num]
+                        if col_name == 'Action_Status':
+                            worksheet.write(row_num + 1, col_num, status, status_fmt)
+                        else:
+                            worksheet.write(row_num + 1, col_num, row[col_name], row_fmt)
 
-        st.divider()
-        st.subheader("📝 We Value Your Feedback")
-        st.link_button("Share Your Honest Review", "https://docs.google.com/forms/d/e/1FAIpQLSee7lV13AZ4594w2ZmzvB4mfUOMCOLPBbhQss-I37ng_gkksA/viewform?usp=sf_link")
-        st.download_button("📥 Download Optimization Report", buf.getvalue(), "Inventory_Optimization_Report.xlsx")
+            st.divider()
+            
+            # --- 5. EXPORT & MONETIZATION / FEEDBACK CTA ---
+            d_col1, d_col2 = st.columns([1, 1])
+            with d_col1:
+                st.download_button(
+                    label="📥 Download Full Executive Optimization Report",
+                    data=buf.getvalue(),
+                    file_name=f"Inventory_Optimization_Report_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+            with d_col2:
+                st.link_button("📝 Share Feedback / Report a Feature Request", "https://docs.google.com/forms/d/e/1FAIpQLSee7lV13AZ4594w2ZmzvB4mfUOMCOLPBbhQss-I37ng_gkksA/viewform?usp=sf_link")
 
-with tab2:
-    f_all = st.file_uploader("3-sheet Workbook", type=['xlsx'])
-    if f_all:
-        xls = pd.ExcelFile(f_all)
-        s = xls.sheet_names
-        df_master, df_issues, df_po = [pd.read_excel(xls, sheet_name=s[i]) for i in range(3)]
+            # High-conversion advisory banner for small business owners
+            st.markdown("""
+            <div class="consult-banner">
+                <h4>🤝 Need a Customized Plant or Warehouse Inventory Audit?</h4>
+                <p>Dealing with chronic supplier delays, dead stock, or want automated Tally / ERP integrations tailored to your factory? 
+                Get a 1-on-1 expert diagnostic to optimize working capital and service levels.</p>
+                <p>👉 <b>Reach out directly:</b> Connect via LinkedIn or reply through our feedback form to request an audit.</p>
+            </div>
+            """, unsafe_allow_html=True)
